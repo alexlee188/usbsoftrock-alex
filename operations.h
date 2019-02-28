@@ -62,6 +62,8 @@
 #define REQUEST_SET_PTT				0x50
 #define REQUEST_READ_KEYS			0x51
 
+#define SI570_I2C_ADDR2 0x05 // not permissible in I2C spec, but FiFi-SDR uses it
+
 struct solution {
 	int HS_DIV;
 	int N1;
