@@ -78,20 +78,23 @@ void calibrate(usb_dev_handle *handle)
 {
 	unsigned char buffer[6];			// bug fix: signed char causes error in freq calculation below
 	int request = REQUEST_READ_REGISTERS;
-	int value = SI570_I2C_ADDR;
+	//	int value = SI570_I2C_ADDR;
+	int value = i2cAddress; // Si570 i2c address varies
 	int index = 0;
 	int retVal;
         
 	
 	// Si570 RECALL function
 	char i2cError;
-    	retVal = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, 0x20, SI570_I2C_ADDR | (135<<8), 0x01, &i2cError, 1, 500);
+    	retVal = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, 0x20,
+								 value | (135<<8), 0x01, &i2cError, 1, 500);
 	if (retVal != 1 || i2cError != 0) {
 		fprintf(stderr, "Failed reseting to factory frequency\n");
 	}
 
 	// send message to USB device
-	if (usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, request, value, index, buffer, 6, 500)) 
+	if (usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, request,
+						value, index, buffer, 6, 500)) 
 	{	
 
 		int RFREQ_int = ((buffer[2] & 0xf0) >> 4) + ((buffer[1] & 0x3f) * 16);
@@ -103,19 +106,21 @@ void calibrate(usb_dev_handle *handle)
 		int HS_DIV = (buffer[0] & 0xE0) >> 5;
 		int HS_DIV_MAP[] = {4,5,6,7,-1,9,-1,11}; 
 		
-		if (verbose){
-			printf("RFREQ = %f\n", RFREQ);
-			printf("N1 = %d\n", N1);
-			printf("HS_DIV = %d, HS_DIV_MAP[%d] = %d\n", HS_DIV, HS_DIV, HS_DIV_MAP[HS_DIV]);
+		if (verbose>1){
+			fprintf(stderr, "RFREQ = %f\n", RFREQ);
+			fprintf(stderr, "N1 = %d\n", N1);
+			fprintf(stderr, "HS_DIV = %d, HS_DIV_MAP[%d] = %d\n", HS_DIV, HS_DIV, HS_DIV_MAP[HS_DIV]);
 		}
 		// Validate the calibration result before saving it
 		// DEFAULT_XTALL
 		double newXtallFreq = (startupFreq * (N1 +1) * HS_DIV_MAP[HS_DIV]) / RFREQ;
 		
+		if (verbose>1) fprintf(stderr, "fXTALL = %f , maxDeviation = %d\n", newXtallFreq, SI570_XTALL_DEVIATION_PPM);
+		
 		if ((1000000.0 * fabs(newXtallFreq - SI570_NOMINAL_XTALL_FREQ) / SI570_NOMINAL_XTALL_FREQ) <= SI570_XTALL_DEVIATION_PPM) {
 			printf("fXTALL = %f\n", newXtallFreq);
 		} else {
-			fprintf(stderr, "Calibration Failed: The calculated crystal reference is outside of the spec for the Si570 device. The most likely possibility is that since power own, the Si570 has been shifted from the factory default frequency.\n");
+			fprintf(stderr, "Calibration Failed: The calculated crystal reference is outside of the spec for the Si570 device.\nSince the power is on, the most likely possibility is the Si570 has been shifted from the factory default frequency.\n");
 		}
 	} else {
 		fprintf(stderr, "Error communicating with USB device\n");
@@ -126,7 +131,8 @@ void readStartupFreq(usb_dev_handle *handle) {
 	unsigned int iFreq;
 	int nBytes;
 	
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_STARTUP, 0, 0, (char *) &iFreq, sizeof(iFreq), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_STARTUP,
+							 0, 0, (char *) &iFreq, sizeof(iFreq), 500);
 
 	if (nBytes == 4) {
 		double dFreq;		
@@ -139,7 +145,8 @@ void readXtallFreq(usb_dev_handle *handle) {
 	unsigned int iFreq;
 	int nBytes;
 	
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_XTALL, 0, 0, (char *) &iFreq, sizeof(iFreq), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_XTALL,
+							 0, 0, (char *) &iFreq, sizeof(iFreq), 500);
 
 	if (nBytes == 4) {
 		double dFreq;		
@@ -153,7 +160,8 @@ int readMultiplyLO(usb_dev_handle *handle, int index, double * mul, double *sub)
 //	double sub, mul;
 	int nBytes;
 	unsigned int iSM[2];
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_MULTIPLY_LO, 0, index, (char *) iSM, sizeof(iSM), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_MULTIPLY_LO,
+							 0, index, (char *) iSM, sizeof(iSM), 500);
 
 	if (nBytes == sizeof(iSM)) {
 		*sub = (double)(int) iSM[0] / (1UL << 21); // Signed value
@@ -169,7 +177,8 @@ void readSmoothTunePPM(usb_dev_handle *handle) {
 	unsigned short smooth;
 	int nBytes;
 	
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_SMOOTH_TUNE_PPM, 0, 0, (char *) &smooth, sizeof(smooth), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_SMOOTH_TUNE_PPM,
+							 0, 0, (char *) &smooth, sizeof(smooth), 500);
 
 	if (nBytes == 2) {
 		printf("Smooth Tune : %d PPM\n", smooth);
@@ -182,7 +191,8 @@ int readFilters(usb_dev_handle *handle, int isLPF, unsigned short * FilterCrossO
 	int index = isLPF == 0 ? 255 : 255 + 256;
 	
 	// first find out how may cross over points there are for the 1st bank, use 255 for index
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, 0, index, (char *) FilterCrossOver, length, 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
+							 REQUEST_FILTERS, 0, index, (char *) FilterCrossOver, length, 500);
   
 	return nBytes / 2;  
 }
@@ -190,7 +200,8 @@ int readFilters(usb_dev_handle *handle, int isLPF, unsigned short * FilterCrossO
 int readBPFAddresses(usb_dev_handle *handle, unsigned char * addresses) {
 	int nBytes;
 	
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_BPF_ADDRESS, 0, 0, (char *) addresses, 16, 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_BPF_ADDRESS,
+							 0, 0, (char *) addresses, 16, 500);
 	
 	return nBytes;
 }
@@ -198,7 +209,8 @@ int readBPFAddresses(usb_dev_handle *handle, unsigned char * addresses) {
 void setBPFAddress(usb_dev_handle *handle, int index, int value) {
 	unsigned char * addresses[16]; 
 	
-	usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_BPF_ADDRESS, value, index, (char *) addresses, sizeof(addresses), 500);
+	usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_BPF_ADDRESS,
+					value, index, (char *) addresses, sizeof(addresses), 500);
 
 }
 
@@ -208,7 +220,8 @@ void setBPFCrossOver(usb_dev_handle *handle, int index, float newFreq) {
 
 	
   // first find out how may cross over points there are for the 1st bank, use 255 for index
-  //nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, 0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+  //nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+  //                         0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
   nFilters = readFilters(handle, FALSE, FilterCrossOver, sizeof(FilterCrossOver));
 
   if (nFilters > 0) {
@@ -216,9 +229,11 @@ void setBPFCrossOver(usb_dev_handle *handle, int index, float newFreq) {
     int i;
     // even if we just set one point, we have to set all
     for (i = 0; i < nFilters - 1; i++) 
-	    usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, FilterCrossOver[i], i, NULL, 0, 500);
+	    usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+						FilterCrossOver[i], i, NULL, 0, 500);
     // read out the values when setting the flag.
-    usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, FilterCrossOver[i], i, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+    usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+					FilterCrossOver[i], i, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
     displayBPFTable(handle, FilterCrossOver, nFilters);
   }
 
@@ -227,7 +242,8 @@ void setBPFCrossOver(usb_dev_handle *handle, int index, float newFreq) {
 int readLPFAddresses(usb_dev_handle *handle, unsigned char * addresses) {
 	int nBytes;
 	
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_LPF_ADDRESS, 0, 0, (char *) addresses, 16, 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_READ_LPF_ADDRESS,
+							 0, 0, (char *) addresses, 16, 500);
 	
 	return nBytes;
 }
@@ -235,7 +251,8 @@ int readLPFAddresses(usb_dev_handle *handle, unsigned char * addresses) {
 void setLPFAddress(usb_dev_handle *handle, int index, int value) {
 	unsigned char * addresses[16]; 
 	
-	usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_LPF_ADDRESS, value, index, (char *) addresses, sizeof(addresses), 500);
+	usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_LPF_ADDRESS,
+					value, index, (char *) addresses, sizeof(addresses), 500);
 
 }
 
@@ -244,7 +261,8 @@ void setLPFCrossOver(usb_dev_handle *handle, int index, float newFreq) {
 	int nFilters;
 
 	// first find out how may cross over points there are for the 2nd bank, use 256+255 for index
-	//nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, 0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+	//nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+	//                         0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
   nFilters = readFilters(handle, TRUE, FilterCrossOver, sizeof(FilterCrossOver));
 
 	if (nFilters > 0) {
@@ -252,9 +270,11 @@ void setLPFCrossOver(usb_dev_handle *handle, int index, float newFreq) {
 		int i;
 		// even if we just set one point, we have to set all
 		for (i = 0; i < nFilters - 1; i++) 
-			usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, FilterCrossOver[i], 256+i, NULL, 0, 500);
+			usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+							FilterCrossOver[i], 256+i, NULL, 0, 500);
 		// read out the values when setting the flag.
-		usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, FilterCrossOver[i], 256+i, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+		usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+						FilterCrossOver[i], 256+i, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
 		displayLPFtable(handle, FilterCrossOver, nFilters);
 	}
 }
@@ -264,11 +284,13 @@ void setBPF(usb_dev_handle *handle, int enable) {
 	int nBytes;
 
 	// first find out how may cross over points there are for the 1st bank, use 255 for index
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, 0, 255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+							 0, 255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
   
 	if (nBytes > 2) {
 
-		nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, enable, (nBytes / 2) - 1, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+		nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+								 enable, (nBytes / 2) - 1, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
 
 		printf("Filter Bank 1:\n");
 		int i;
@@ -285,11 +307,13 @@ void setLPF(usb_dev_handle *handle, int enable) {
 	int nBytes;
 
 	// first find out how may cross over points there are for the 2nd bank, use 256+255 for index
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, 0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+							 0, 256+255, (char *) FilterCrossOver, sizeof(FilterCrossOver), 500);
   
 	if (nBytes > 2) {
 
-		nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS, enable, 256 + (nBytes / 2) - 1, NULL, 0, 500);
+		nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_FILTERS,
+								 enable, 256 + (nBytes / 2) - 1, NULL, 0, 500);
 
 	}	
 }
@@ -300,12 +324,13 @@ void setXtallFrequency(usb_dev_handle *handle, double xtallFreq) {
 
 	iXtallFreq = (unsigned int)( xtallFreq * (1UL<<24) );
 	if (verbose)
-		printf("Crystal Freq = %f (%d)\n", xtallFreq, iXtallFreq);
+		fprintf(stderr, "Crystal Freq = %f (%d)\n", xtallFreq, iXtallFreq);
 
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_XTALL_FREQ, 0, 0, (char *) &iXtallFreq, sizeof(iXtallFreq), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_XTALL_FREQ,
+							 0, 0, (char *) &iXtallFreq, sizeof(iXtallFreq), 500);
   
-	if (verbose >= 2)
-		printf("Return = %d\n", nBytes);
+	if (verbose>1)
+		fprintf(stderr, "Return = %d\n", nBytes);
 
 	if (nBytes < 0)
 		fprintf(stderr, "Failed writing Xtall Frequency to device\n");
@@ -317,7 +342,8 @@ void setStartupFrequency(usb_dev_handle *handle, double startupFreq) {
 
 	iStartupFreq = (unsigned int)( startupFreq * multiplier * (1UL<<21) );
 
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_STARTUP_FREQ, 0, 0, (char *) &iStartupFreq, sizeof(iStartupFreq), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_STARTUP_FREQ,
+							 0, 0, (char *) &iStartupFreq, sizeof(iStartupFreq), 500);
   
 	if (nBytes < 0)
 		fprintf(stderr, "Failed writing startup Frequency to device\n");
@@ -327,10 +353,11 @@ void setSi570Address(usb_dev_handle *handle, unsigned char newI2cAddress) {
   unsigned char i2cAddress;
   int nBytes;
 
-  nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_SI570_ADDR, 0, newI2cAddress, (char *) &i2cAddress, sizeof(i2cAddress), 500);
+  nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_SI570_ADDR,
+						   0, newI2cAddress, (char *) &i2cAddress, sizeof(i2cAddress), 500);
   
   if (nBytes < 0)
-    fprintf(stderr, "Failed writing si570 i2c addresss to device\n");
+    fprintf(stderr, "Failed writing si570 i2c address to device\n");
 
 }
 
@@ -338,13 +365,14 @@ short readSi570Address(usb_dev_handle *handle) {
   unsigned char i2cAddress;
   int nBytes;
   
-  nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_SI570_ADDR, 0, 0, (char *) &i2cAddress, sizeof(i2cAddress), 500);
+  nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN, REQUEST_SET_SI570_ADDR,
+						   0, 0, (char *) &i2cAddress, sizeof(i2cAddress), 500);
   
   if (nBytes == 1) {
     printf("Si570 I2C   : %x Hex\n", i2cAddress);
     return i2cAddress;
   } else {
-    fprintf(stderr, "Failed writing si570 i2c addresss to device\n");
+    fprintf(stderr, "Failed reading si570 i2c address\n");
     return -1;
   }
 }
@@ -357,11 +385,11 @@ void setMultiplyLo(usb_dev_handle * handle, int index, double mul, double sub)
 	iSM[0] = (unsigned int)( sub * (1UL << 21) );
 	iSM[1] = (unsigned int)( mul * (1UL << 21) );
 
-	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_MULTIPLY_LO, 0, index, (char *) &iSM, sizeof(iSM), 500);
+	nBytes = usb_control_msg(handle, USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT, REQUEST_SET_MULTIPLY_LO,
+							 0, index, (char *) &iSM, sizeof(iSM), 500);
   
 	if (nBytes != sizeof(iSM))
 		fprintf(stderr, "Failed writing multiply/lo values to device\n");
-
 }
 
 void displayBands(usb_dev_handle *handle) {
@@ -505,4 +533,3 @@ void displayLPFCrossovers(usb_dev_handle *handle) {
 
   }	
 }*/
-

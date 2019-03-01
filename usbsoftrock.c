@@ -71,8 +71,11 @@
 
 double multiplier = 4;
 
-#define VENDOR_NAME			"www.obdev.at"
-#define PRODUCT_NAME			"DG8SAQ-I2C"
+#define VENDOR_NAME1			"www.obdev.at" // most Si570 devices
+#define VENDOR_NAME2			"www.ov-lennestadt.de" // FiFi-SDR
+#define PRODUCT_NAME1			"DG8SAQ-I2C"
+#define PRODUCT_NAME2			"Peaberry SDR"
+#define PRODUCT_NAME3           "FiFi-SDR"
 
 extern char    serialNumberString[256];
 
@@ -94,10 +97,11 @@ static void usage(char *name)
   fprintf(stderr, "usbsoftrock %s\n", VERSION);
   fprintf(stderr, "usage: %s [OPTION] COMMAND\n\n", name);
   fprintf(stderr, "OPTION is one or more of\n");
-  fprintf(stderr, "  -a                             Advanced firmware present\n");
-  fprintf(stderr, "                                 i.e. let the firmware calculate registers\n");
+  fprintf(stderr, "  -a                             Advanced firmware present. Firmware calculates registers\n");
+  fprintf(stderr, "                                 i.e. FiFi-SDR (also use \"-i 5\")\n");
   fprintf(stderr, "  -d                             Enter a mode that listens for commands via UDP.\n");
 //  fprintf(stderr, "  -h <freq MHz>                  Enable subharmonic (/3) sampling from frequency (DEFAULT off)\n");
+// FiFi-SDR uses subharmonic sampling to extend upper range to 175 MHz
   fprintf(stderr, "  -i <address>                   I2C address in DECIMAL (DEFAULT = 85 (0x55))\n"); 
   fprintf(stderr, "  -m <multiplier>                Multiplication factor for frequency (DEFAULT = 4)\n");
   fprintf(stderr, "  -p <port num>                  Port to listen for UDP datagrams (DEFAULT = 19004)\n");
@@ -255,15 +259,33 @@ int main(int argc, char **argv) {
 	exit(1);
   }
 
-  usb_init();
+  //  usb_init(); // don't. not here -> usbOpenDevice() handles this.
   char attempt=0, error=0;
   do {
 	attempt++;
-	error=usbOpenDevice(&handle, USBDEV_SHARED_VENDOR, VENDOR_NAME, USBDEV_SHARED_PRODUCT, PRODUCT_NAME, usbSerialID);
+	
+	error=usbOpenDevice(&handle, USBDEV_SHARED_VENDOR, VENDOR_NAME1, USBDEV_SHARED_PRODUCT, PRODUCT_NAME1, usbSerialID);
 	if(error != 0){
-	  fprintf(stderr, "Could not open USB device \"%s\" with vid=0x%x pid=0x%x, retrying\n", PRODUCT_NAME, USBDEV_SHARED_VENDOR, USBDEV_SHARED_PRODUCT);
-	  sleep(2*attempt);
+	  if (verbose) fprintf(stderr, "Did not find USB \"%s\" device, trying \"%s\"\n", PRODUCT_NAME1, PRODUCT_NAME2);
+	  
+	  error=usbOpenDevice(&handle, USBDEV_SHARED_VENDOR, VENDOR_NAME1, USBDEV_SHARED_PRODUCT, PRODUCT_NAME2, usbSerialID);
+	  if(error != 0){
+		if (verbose) fprintf(stderr, "Did not find USB \"%s\" device, trying vendor \"%s\"\n", PRODUCT_NAME2, VENDOR_NAME2);
+		
+		error=usbOpenDevice(&handle, USBDEV_SHARED_VENDOR, VENDOR_NAME2, USBDEV_SHARED_PRODUCT, PRODUCT_NAME3, usbSerialID);
+		if(error != 0){
+		  fprintf(stderr, "Could not open USB Si570 device with vid=0x%x pid=0x%x, retrying\n", USBDEV_SHARED_VENDOR, USBDEV_SHARED_PRODUCT);
+		  sleep(2*attempt);
+		}
+		else
+			if (verbose) fprintf(stderr, "Found USB \"%s\" device\n", PRODUCT_NAME3);
+	  }
+	  else
+		  if (verbose) fprintf(stderr, "Found USB \"%s\" device\n", PRODUCT_NAME2);
 	}
+	else
+		if (verbose) fprintf(stderr, "Found USB \"%s\" device\n", PRODUCT_NAME1);
+	
   } while (error && attempt < USB_MAX_RETRIES);
   if (error) {
 	fprintf(stderr, "Permanent problem opening usb device. Giving up.\n");
@@ -308,7 +330,7 @@ int main(int argc, char **argv) {
       if (bytes > 0) {
         buffer[bytes] = 0;
         if (verbose >= 2)
-          printf("Returned %d bytes from %s: %s\n", bytes, inet_ntoa(clnt.sin_addr), buffer);
+          printf("Returned %ld bytes from %s: %s\n", bytes, inet_ntoa(clnt.sin_addr), buffer);
 
         if (strncmp(buffer, "quit", 4) == 0) {
           if (verbose)
@@ -348,7 +370,7 @@ int main(int argc, char **argv) {
         }
 
       } else {
-      	fprintf(stderr, "recvfrom returned %d\n", bytes);
+      	fprintf(stderr, "recvfrom returned %ld\n", bytes);
       }
     }
 
